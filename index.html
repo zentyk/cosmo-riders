@@ -1,0 +1,129 @@
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <title>Mini F-Zero WebGL</title>
+    <style>  body { margin:0; overflow:hidden; }
+        canvas { display:block; }
+        .controls {
+            position: fixed;
+            bottom: 10px;
+            left: 50%;
+            transform: translateX(-50%);
+            display: flex;
+            gap: 10px;
+            z-index: 10;
+        }
+        .controls button {
+            width: 60px;
+            height: 60px;
+            font-size: 24px;
+            border-radius: 10px;
+            border: none;
+            background: rgba(255,255,255,0.8);
+        }</style>
+</head>
+<body>
+	<div class="controls">
+    <button id="left">⟵</button>
+    <button id="z">Z</button>
+    <button id="up">↑</button>
+    <button id="x">X</button>
+    <button id="right">⟶</button>
+</div>
+<script src="https://cdn.jsdelivr.net/npm/three@latest/build/three.js"></script>
+<script>
+const scene = new THREE.Scene();
+const camera = new THREE.PerspectiveCamera(75, window.innerWidth/window.innerHeight, 0.1, 1000);
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setSize(window.innerWidth, window.innerHeight);
+document.body.appendChild(renderer.domElement);
+
+let speed = 0;
+const maxSpeed = 1;
+const accel = 0.02;
+const decel = 0.01;
+const turnSpeed = 0.03;
+const tiltMax = 0.3;
+const tiltSpeed = 0.02;
+let tiltAngle = 0;
+
+const playerGeo = new THREE.BoxGeometry(1, 0.5, 2);
+const playerMat = new THREE.MeshStandardMaterial({ color: 0x00ffdd });
+const player = new THREE.Mesh(playerGeo, playerMat);
+player.position.y = 0.25;
+scene.add(player);
+
+camera.position.set(0, 2, -5);
+camera.lookAt(player.position);
+
+const ambient = new THREE.AmbientLight(0xffffff, 0.5);
+scene.add(ambient);
+const dir = new THREE.DirectionalLight(0xffffff, 0.5);
+dir.position.set(0, 5, -5);
+scene.add(dir);
+
+const trackGroup = new THREE.Group();
+for (let i = 0; i < 500; i++) {
+    const blockGeo = new THREE.BoxGeometry(10, 0.1, 10);
+    const blockMat = new THREE.MeshStandardMaterial({ color: i % 2 ? 0x444444 : 0x222222 });
+    const block = new THREE.Mesh(blockGeo, blockMat);
+    block.position.z = -i * 10;
+    block.rotation.z = Math.sin(i * 0.2) * 0.1;
+    trackGroup.add(block);
+}
+scene.add(trackGroup);
+
+const keys = {};
+document.addEventListener('keydown', e => keys[e.code] = true);
+document.addEventListener('keyup', e => keys[e.code] = false);
+
+function animate() {
+    requestAnimationFrame(animate);
+
+    if (keys['ArrowUp']) speed = Math.min(maxSpeed, speed + accel);
+    else speed = Math.max(0, speed - decel);
+
+    if (keys['ArrowLeft']) player.rotation.y += turnSpeed;
+    if (keys['ArrowRight']) player.rotation.y -= turnSpeed;
+
+    if (keys['KeyZ']) tiltAngle = Math.min(tiltMax, tiltAngle + tiltSpeed);
+    else if (keys['KeyX']) tiltAngle = Math.max(-tiltMax, tiltAngle - tiltSpeed);
+    else tiltAngle += (0 - tiltAngle) * 0.1;
+    player.rotation.z = tiltAngle;
+
+    const forward = new THREE.Vector3(0, 0, 1).applyQuaternion(player.quaternion);
+    player.position.addScaledVector(forward, -speed);
+
+    const idx = Math.floor(-player.position.z / 10) % trackGroup.children.length;
+    const i = (idx + trackGroup.children.length) % trackGroup.children.length;
+    const slope = trackGroup.children[i].rotation.z;
+    player.position.x += Math.sin(slope) * speed * 0.5;
+
+    let desiredCamPos;
+    if (speed > 0.01) {
+        desiredCamPos = player.position.clone().add(new THREE.Vector3(0, 2, -5).applyQuaternion(player.quaternion));
+    } else {
+        desiredCamPos = player.position.clone().add(new THREE.Vector3(0, 1.5, 3));
+    }
+    camera.position.lerp(desiredCamPos, 0.1);
+    const lookAhead = player.position.clone().add(new THREE.Vector3(0, 0, -10).applyQuaternion(player.quaternion));
+    camera.lookAt(lookAhead);
+
+    trackGroup.children.forEach(block => {
+        if (block.position.z - player.position.z > 10) {
+            block.position.z -= trackGroup.children.length * 10;
+        }
+    });
+
+    renderer.render(scene, camera);
+}
+animate();
+
+window.addEventListener('resize', () => {
+    camera.aspect = window.innerWidth / window.innerHeight;
+    camera.updateProjectionMatrix();
+    renderer.setSize(window.innerWidth, window.innerHeight);
+});
+</script>
+</body>
+</html>
